@@ -275,7 +275,7 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 			if (strncmp(cname.c_str(), "dcut", 4) == 0) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				bool flag = cinput->getChannelData(j)[0] >= 1;
-				if (dcut[me] != flag) {
+				if (nofMEs > me && dcut[me] != flag) {
 					dcut[me] = flag;
 					if (flag) performCut(me);
 				}
@@ -283,7 +283,7 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 			if (strncmp(cname.c_str(), "daut", 4) == 0) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				bool flag = cinput->getChannelData(j)[0] >= 1;
-				if (daut[me] != flag) {
+				if (nofMEs > me && daut[me] != flag) {
 					daut[me] = flag;
 					if (flag) performAuto(me);
 				}
