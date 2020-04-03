@@ -467,6 +467,8 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 	nofSSrcs = (int)data[7];
 	topology_values = { (float)nofMEs, (float)nofSources, (float)nofCGs, (float)nofAuxs, (float)nofDSKs, (float)nofStingers, (float)nofDVEs, (float)nofSSrcs };
 
+	dcut.assign(nofMEs, false);
+	daut.assign(nofMEs, false);
 	prgi.assign(nofMEs, 0.0f);
 	prvi.assign(nofMEs, 0.0f);
 
