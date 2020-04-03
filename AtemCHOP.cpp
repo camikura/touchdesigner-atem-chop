@@ -291,14 +291,14 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 			if (strncmp(cname.c_str(), "prgi", 4) == 0) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
-				if (prgi[me] != source) {
+				if (nofMEs > me && prgi[me] != source) {
 					changeProgramInput(me, source);
 				}
 			}
 			if (strncmp(cname.c_str(), "prvi", 4) == 0) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
-				if (prvi[me] != source) {
+				if (nofMEs > me && prvi[me] != source) {
 					changePreviewInput(me, source);
 				}
 			}
