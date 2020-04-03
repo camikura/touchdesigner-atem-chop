@@ -66,8 +66,8 @@ private:
 	vector<uint8_t> start_packet{ 0x10, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	vector<uint8_t> ack_packet{ 0x80, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	vector<uint16_t> prgi{ 0 };
-	vector<uint16_t> prvi{ 0 };
+	vector<uint16_t> cpgi{ 0 };
+	vector<uint16_t> cpvi{ 0 };
 	vector<bool> dcut{ false };
 	vector<bool> daut{ false };
 
@@ -288,17 +288,17 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 					if (flag) performAuto(me);
 				}
 			}
-			if (strncmp(cname.c_str(), "prgi", 4) == 0) {
+			if (strncmp(cname.c_str(), "cpgi", 4) == 0) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
-				if (nofMEs > me && prgi[me] != source) {
+				if (nofMEs > me && cpgi[me] != source) {
 					changeProgramInput(me, source);
 				}
 			}
-			if (strncmp(cname.c_str(), "prvi", 4) == 0) {
+			if (strncmp(cname.c_str(), "cpvi", 4) == 0) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
-				if (nofMEs > me && prvi[me] != source) {
+				if (nofMEs > me && cpvi[me] != source) {
 					changePreviewInput(me, source);
 				}
 			}
@@ -469,8 +469,8 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 
 	dcut.assign(nofMEs, false);
 	daut.assign(nofMEs, false);
-	prgi.assign(nofMEs, 0.0f);
-	prvi.assign(nofMEs, 0.0f);
+	cpgi.assign(nofMEs, 0.0f);
+	cpvi.assign(nofMEs, 0.0f);
 
 	chan_names.clear();
 	chan_values.clear();
@@ -539,7 +539,7 @@ void AtemCHOP::performAuto(uint8_t me)
 
 void AtemCHOP::changeProgramInput(uint8_t me, uint16_t source)
 {
-	prgi[me] = source;
+	cpgi[me] = source;
 
 	vector<uint8_t> data{ me, 0 };
 	data.push_back(source >> 0x08);
@@ -550,7 +550,7 @@ void AtemCHOP::changeProgramInput(uint8_t me, uint16_t source)
 
 void AtemCHOP::changePreviewInput(uint8_t me, uint16_t source)
 {
-	prvi[me] = source;
+	cpvi[me] = source;
 
 	vector<uint8_t> data{ me, 0 };
 	data.push_back(source >> 0x08);
