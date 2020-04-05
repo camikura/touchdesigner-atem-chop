@@ -66,10 +66,11 @@ private:
 	vector<uint8_t> start_packet{ 0x10, 0x14, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x26, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 	vector<uint8_t> ack_packet{ 0x80, 0x0c, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
 
-	vector<uint16_t> cpgi{ 0 };
-	vector<uint16_t> cpvi{ 0 };
 	vector<bool> dcut{ false };
 	vector<bool> daut{ false };
+	vector<uint16_t> cpgi{ 0 };
+	vector<uint16_t> cpvi{ 0 };
+	vector<uint16_t> caus{ 0 };
 
 	uint16_t session_id;
 	uint16_t last_session_id;
@@ -109,8 +110,9 @@ private:
 	void sendCommand(string command, vector<uint8_t> data);
 
 	void readCommandTopology(vector<uint8_t> data);
-	void readCommandChangeProgramInput(vector<uint8_t> data);
-	void readCommandChangePreviewInput(vector<uint8_t> data);
+	void readCommandProgramInput(vector<uint8_t> data);
+	void readCommandPreviewInput(vector<uint8_t> data);
+	void readCommandAuxSource(vector<uint8_t> data);
 
 	void parseSessionID(vector<uint8_t> packet);
 	void parseRemotePacketID(vector<uint8_t> packet);
@@ -121,6 +123,7 @@ private:
 	void performAuto(uint8_t me);
 	void changeProgramInput(uint8_t me, uint16_t source);
 	void changePreviewInput(uint8_t me, uint16_t source);
+	void changeAuxSource(uint8_t index, uint16_t source);
 
 public:
 	AtemCHOP(const OP_NodeInfo* info)
@@ -288,18 +291,25 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 					if (flag) performAuto(me);
 				}
 			}
-			if (strncmp(cname.c_str(), "cpgi", 4) == 0) {
+			if (!strncmp(cname.c_str(), "cpgi", 4)) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
 				if (nofMEs > me && cpgi[me] != source) {
 					changeProgramInput(me, source);
 				}
 			}
-			if (strncmp(cname.c_str(), "cpvi", 4) == 0) {
+			if (!strncmp(cname.c_str(), "cpvi", 4)) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
 				if (nofMEs > me && cpvi[me] != source) {
 					changePreviewInput(me, source);
+				}
+			}
+			if (!strncmp(cname.c_str(), "caus", 4)) {
+				int index = stoi(cname.substr(4, 1)) - 1;
+				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
+				if (nofAuxs > index && caus[index] != source) {
+					changeAuxSource(index, source);
 				}
 			}
 		}
@@ -451,8 +461,9 @@ void AtemCHOP::parseCommand(vector<uint8_t> packet)
 void AtemCHOP::readCommand(string command, vector<uint8_t> data)
 {
 	if (command == "_top") readCommandTopology(data);
-	if (command == "PrgI") readCommandChangeProgramInput(data);
-	if (command == "PrvI") readCommandChangePreviewInput(data);
+	if (command == "PrgI") readCommandProgramInput(data);
+	if (command == "PrvI") readCommandPreviewInput(data);
+	if (command == "AuxS") readCommandAuxSource(data);
 }
 
 void AtemCHOP::readCommandTopology(vector<uint8_t> data)
@@ -482,20 +493,31 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 		chan_names.push_back("prvi1");
 		chan_values.push_back(0.0f);
 	}
+	for (int i = 0; i < nofAuxs; i++) {
+		chan_names.push_back("auxs1");
+		chan_values.push_back(0.0f);
+	}
 }
 
-void AtemCHOP::readCommandChangeProgramInput(vector<uint8_t> data)
+void AtemCHOP::readCommandProgramInput(vector<uint8_t> data)
 {
 	int m = (int)data[0];
 	uint16_t i = word(data[2], data[3]);
 	chan_values[m] = (float)i;
 }
 
-void AtemCHOP::readCommandChangePreviewInput(vector<uint8_t> data)
+void AtemCHOP::readCommandPreviewInput(vector<uint8_t> data)
 {
 	int m = (int)data[0] + nofMEs;
 	uint16_t i = word(data[2], data[3]);
 	chan_values[m] = (float)i;
+}
+
+void AtemCHOP::readCommandAuxSource(vector<uint8_t> data)
+{
+	int i = (int)data[0] + nofMEs * 2;
+	uint16_t s = word(data[2], data[3]);
+	chan_values[i] = (float)s;
 }
 
 void AtemCHOP::sendCommand(string command, vector<uint8_t> data)
@@ -557,6 +579,17 @@ void AtemCHOP::changePreviewInput(uint8_t me, uint16_t source)
 	data.push_back(source & 0xff);
 
 	sendCommand("CPvI", data);
+}
+
+void AtemCHOP::changeAuxSource(uint8_t index, uint16_t source)
+{
+	caus[index] = source;
+
+	vector<uint8_t> data{ 1, index };
+	data.push_back(source >> 0x08);
+	data.push_back(source & 0xff);
+
+	sendCommand("CAuS", data);
 }
 
 uint16_t AtemCHOP::word(uint8_t n1, uint8_t n2)
