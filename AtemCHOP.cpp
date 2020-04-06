@@ -17,7 +17,7 @@
 #include <string>
 #include <thread>
 #include <queue>
-
+#include <sstream>
 #include <time.h>
 
 #include "Udp.hpp"
@@ -71,6 +71,8 @@ private:
 	vector<uint16_t> cpgi{ 0 };
 	vector<uint16_t> cpvi{ 0 };
 	vector<uint16_t> caus{ 0 };
+	vector<bool> cdsl{ false };
+	vector<bool> ddsa{ false };
 
 	uint16_t session_id;
 	uint16_t last_session_id;
@@ -86,6 +88,7 @@ private:
 	time_t last_recv_packet_t;
 	time_t last_send_packet_t;
 
+	ostringstream oss;
 
 	Udp udp;
 
@@ -113,6 +116,7 @@ private:
 	void readCommandProgramInput(vector<uint8_t> data);
 	void readCommandPreviewInput(vector<uint8_t> data);
 	void readCommandAuxSource(vector<uint8_t> data);
+	void readCommandDownstreamKeyer(vector<uint8_t> data);
 
 	void parseSessionID(vector<uint8_t> packet);
 	void parseRemotePacketID(vector<uint8_t> packet);
@@ -124,6 +128,8 @@ private:
 	void changeProgramInput(uint8_t me, uint16_t source);
 	void changePreviewInput(uint8_t me, uint16_t source);
 	void changeAuxSource(uint8_t index, uint16_t source);
+	void changeDownstreamKeyer(uint8_t keyer, bool onair);
+	void performDownstreamKeyerAuto(uint8_t keyer);
 
 public:
 	AtemCHOP(const OP_NodeInfo* info)
@@ -275,7 +281,7 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 		for (int j = 0; j < cinput->numChannels; j++) {
 			string cname = cinput->getChannelName(j);
 
-			if (strncmp(cname.c_str(), "dcut", 4) == 0) {
+			if (!strncmp(cname.c_str(), "dcut", 4)) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				bool flag = cinput->getChannelData(j)[0] >= 1;
 				if (nofMEs > me && dcut[me] != flag) {
@@ -283,7 +289,7 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 					if (flag) performCut(me);
 				}
 			}
-			if (strncmp(cname.c_str(), "daut", 4) == 0) {
+			if (!strncmp(cname.c_str(), "daut", 4)) {
 				int me = stoi(cname.substr(4, 1)) - 1;
 				bool flag = cinput->getChannelData(j)[0] >= 1;
 				if (nofMEs > me && daut[me] != flag) {
@@ -310,6 +316,21 @@ void AtemCHOP::executeHandleInputs(const OP_Inputs* inputs)
 				uint16_t source = uint16_t(cinput->getChannelData(j)[0]);
 				if (nofAuxs > index && caus[index] != source) {
 					changeAuxSource(index, source);
+				}
+			}
+			if (!strncmp(cname.c_str(), "cdsl", 4)) {
+				int keyer = stoi(cname.substr(4, 1)) - 1;
+				bool onair = cinput->getChannelData(j)[0] >= 1;
+				if (nofDSKs > keyer && cdsl[keyer] != onair) {
+					changeDownstreamKeyer(keyer, onair);
+				}
+			}
+			if (!strncmp(cname.c_str(), "ddsa", 4)) {
+				int keyer = stoi(cname.substr(4, 1)) - 1;
+				bool flag = cinput->getChannelData(j)[0] >= 1;
+				if (nofDSKs > keyer && ddsa[keyer] != flag) {
+					ddsa[keyer] = flag;
+					if (flag) performDownstreamKeyerAuto(keyer);
 				}
 			}
 		}
@@ -370,6 +391,7 @@ void AtemCHOP::sendPacket(vector<uint8_t> packet)
 
 	que.push(packet);
 
+	// for reconnect
 	last_send_packet_t = time(NULL);
 }
 
@@ -464,6 +486,7 @@ void AtemCHOP::readCommand(string command, vector<uint8_t> data)
 	if (command == "PrgI") readCommandProgramInput(data);
 	if (command == "PrvI") readCommandPreviewInput(data);
 	if (command == "AuxS") readCommandAuxSource(data);
+	if (command == "DskS") readCommandDownstreamKeyer(data);
 }
 
 void AtemCHOP::readCommandTopology(vector<uint8_t> data)
@@ -478,11 +501,14 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 	nofSSrcs = (int)data[7];
 	topology_values = { (float)nofMEs, (float)nofSources, (float)nofCGs, (float)nofAuxs, (float)nofDSKs, (float)nofStingers, (float)nofDVEs, (float)nofSSrcs };
 
+	// for send command
 	dcut.assign(nofMEs, false);
 	daut.assign(nofMEs, false);
 	cpgi.assign(nofMEs, 0.0f);
 	cpvi.assign(nofMEs, 0.0f);
+	ddsa.assign(nofDSKs, false);
 
+	// for read command
 	chan_names.clear();
 	chan_values.clear();
 	for (int i = 0; i < nofMEs; i++) {
@@ -495,6 +521,26 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 	}
 	for (int i = 0; i < nofAuxs; i++) {
 		chan_names.push_back("auxs1");
+		chan_values.push_back(0.0f);
+	}
+	for (int i = 0; i < nofDSKs; i++) {
+		chan_names.push_back("dsks1");
+		oss << "dsks" << (i + 1) << "_intran";
+		chan_names.push_back(oss.str());
+		oss.str("");
+		oss.clear();
+		oss << "dsks" << (i + 1) << "_inauto";
+		chan_names.push_back(oss.str());
+		oss.str("");
+		oss.clear();
+		oss << "dsks" << (i + 1) << "_remain";
+		chan_names.push_back(oss.str());
+		oss.str("");
+		oss.clear();
+
+		chan_values.push_back(0.0f);
+		chan_values.push_back(0.0f);
+		chan_values.push_back(0.0f);
 		chan_values.push_back(0.0f);
 	}
 }
@@ -518,6 +564,19 @@ void AtemCHOP::readCommandAuxSource(vector<uint8_t> data)
 	int i = (int)data[0] + nofMEs * 2;
 	uint16_t s = word(data[2], data[3]);
 	chan_values[i] = (float)s;
+}
+
+void AtemCHOP::readCommandDownstreamKeyer(vector<uint8_t> data)
+{
+	int i = data[0] * 4 + nofMEs * 2 + nofAuxs;
+	bool onair = (data[1] & 0x01) > 0;
+	bool intran = (data[2] & 0x01) > 0;
+	bool inauto = (data[3] & 0x01) > 0;
+	int remain = (int)data[5];
+	chan_values[i] = (float)onair;
+	chan_values[i+1] = (float)intran;
+	chan_values[i+2] = (float)inauto;
+	chan_values[i+3] = (float)remain;
 }
 
 void AtemCHOP::sendCommand(string command, vector<uint8_t> data)
@@ -590,6 +649,22 @@ void AtemCHOP::changeAuxSource(uint8_t index, uint16_t source)
 	data.push_back(source & 0xff);
 
 	sendCommand("CAuS", data);
+}
+
+void AtemCHOP::changeDownstreamKeyer(uint8_t keyer, bool onair)
+{
+	cdsl[keyer] = onair;
+
+	vector<uint8_t> data{ keyer, 0, 0, 0 };
+	if (onair) data[1] |= 0x01;
+
+	sendCommand("CDsL", data);
+}
+
+void AtemCHOP::performDownstreamKeyerAuto(uint8_t keyer)
+{
+	vector<uint8_t> data{ keyer, 0, 0, 0 };
+	sendCommand("DDsA", data);
 }
 
 uint16_t AtemCHOP::word(uint8_t n1, uint8_t n2)

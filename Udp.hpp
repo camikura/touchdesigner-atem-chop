@@ -14,7 +14,6 @@ private:
 	WSAData wsaData;
 	SOCKET sock;
 	struct sockaddr_in addr;
-	string ip;
 	char recv_buf[2048];
 
 public:
@@ -24,16 +23,12 @@ public:
 	void setup(string ip);
 	void teardown();
 
-	string getAddress();
-	void setAddress(string ip);
 	void sendPacket(vector<uint8_t> packet);
 
 	vector<uint8_t> recvPacket();
 };
 
-Udp::Udp()
-{
-};
+Udp::Udp() {};
 
 Udp::~Udp()
 {
@@ -61,25 +56,10 @@ void Udp::teardown()
 	WSACleanup();
 }
 
-string Udp::getAddress()
-{
-	return this->ip;
-}
-
-void Udp::setAddress(string ip)
-{
-	this->ip = ip;
-
-}
-
 void Udp::sendPacket(vector<uint8_t> packet)
 {
 	int addr_len = sizeof(addr);
-	//int buf_len = int(packet.size());
-	//cout << buf_len << endl;
-	//const char* buf = string(begin(packet), end(packet)).c_str();
 	sendto(sock, string(begin(packet), end(packet)).c_str(), packet.size(), 0, (struct sockaddr*) & addr, addr_len);
-	//sendto(sock, buf, buf_len, 0, (struct sockaddr*) & addr, addr_len);
 }
 
 vector<uint8_t> Udp::recvPacket()
