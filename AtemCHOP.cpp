@@ -19,6 +19,7 @@
 #include <queue>
 #include <sstream>
 #include <time.h>
+#include <algorithm>
 
 #include "Udp.hpp"
 
@@ -48,6 +49,7 @@ private:
 
 	int nofMEs = 0;
 	int nofSources = 0;
+	int nofVideoSources = 0;
 	int nofCGs = 0;
 	int nofAuxs = 0;
 	int nofDSKs = 0;
@@ -58,8 +60,11 @@ private:
 	vector<string> chan_names;
 	vector<float> chan_values;
 
-	vector<string> topology_names{ "atemNofMEs", "atemNofSoures", "atemNofCGs", "atemNofAuxs", "atemNofDSKs", "atemNofStingers", "atemNofDVEs", "atemNofSSrcs" };
-	vector<float> topology_values{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+	vector<string> topology_names{ "atemNofMEs", "atemNofSoures", "atemNofVideoSoures", "atemNofCGs", "atemNofAuxs", "atemNofDSKs", "atemNofStingers", "atemNofDVEs", "atemNofSSrcs" };
+	vector<float> topology_values{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+
+	vector<string> atem_video_source_names{ };
+	vector<string> atem_video_source_labels{ };
 
 	uint8_t conn_state;
 
@@ -88,6 +93,9 @@ private:
 	time_t last_recv_packet_t;
 	time_t last_send_packet_t;
 
+	string atem_product_id;
+	string atem_warning;
+
 	ostringstream oss;
 
 	Udp udp;
@@ -113,10 +121,15 @@ private:
 	void sendCommand(string command, vector<uint8_t> data);
 
 	void readCommandTopology(vector<uint8_t> data);
+	void readCommandProductId(vector<uint8_t> data);
+	void readCommandWarning(vector<uint8_t> data);
+	void readCommandInputProperty(vector<uint8_t> data);
 	void readCommandProgramInput(vector<uint8_t> data);
 	void readCommandPreviewInput(vector<uint8_t> data);
 	void readCommandAuxSource(vector<uint8_t> data);
 	void readCommandDownstreamKeyer(vector<uint8_t> data);
+
+	string AtemCHOP::readCommandStringUpToNull(vector<uint8_t> data);
 
 	void parseSessionID(vector<uint8_t> packet);
 	void parseRemotePacketID(vector<uint8_t> packet);
@@ -223,6 +236,41 @@ public:
 		}
 	}
 
+	bool getInfoDATSize(OP_InfoDATSize* infoSize, void* reserved1)
+	{
+		infoSize->rows = 2 + nofVideoSources;
+		infoSize->cols = 3;
+		// Setting this to false means we'll be assigning values to the table
+		// one row at a time. True means we'll do it one column at a time.
+		infoSize->byColumn = false;
+		return true;
+	}
+
+	void getInfoDATEntries(int32_t index, int32_t nEntries, OP_InfoDATEntries* entries, void* reserved1)
+	{
+		if (index == 0)
+		{
+			entries->values[0]->setString("Product Id");
+			entries->values[1]->setString(atem_product_id.c_str());
+			entries->values[2]->setString("");
+		}
+
+		if (index == 1)
+		{
+			entries->values[0]->setString("Warning");
+			entries->values[1]->setString(atem_warning.c_str());
+			entries->values[2]->setString("");
+		}
+
+		if (index >= 2 && index <= 2 + nofVideoSources)
+		{
+			char name[10];
+			sprintf(name, "Video%d", index - 1);
+			entries->values[0]->setString(name);
+			entries->values[1]->setString(atem_video_source_names[index - 2].c_str());
+			entries->values[2]->setString(atem_video_source_labels[index - 2].c_str());
+		}
+	}
 
 	void setupParameters(OP_ParameterManager* manager, void* reserved1)
 	{
@@ -483,6 +531,10 @@ void AtemCHOP::parseCommand(vector<uint8_t> packet)
 void AtemCHOP::readCommand(string command, vector<uint8_t> data)
 {
 	if (command == "_top") readCommandTopology(data);
+	if (command == "_pin") readCommandProductId(data);
+	if (command == "Warn") readCommandWarning(data);
+	if (command == "InPr") readCommandInputProperty(data);
+
 	if (command == "PrgI") readCommandProgramInput(data);
 	if (command == "PrvI") readCommandPreviewInput(data);
 	if (command == "AuxS") readCommandAuxSource(data);
@@ -499,7 +551,7 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 	nofStingers = (int)data[5];
 	nofDVEs = (int)data[6];
 	nofSSrcs = (int)data[7];
-	topology_values = { (float)nofMEs, (float)nofSources, (float)nofCGs, (float)nofAuxs, (float)nofDSKs, (float)nofStingers, (float)nofDVEs, (float)nofSSrcs };
+	topology_values = { (float)nofMEs, (float)nofSources, (float)nofVideoSources, (float)nofCGs, (float)nofAuxs, (float)nofDSKs, (float)nofStingers, (float)nofDVEs, (float)nofSSrcs };
 
 	// for send command
 	dcut.assign(nofMEs, false);
@@ -542,6 +594,46 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 		chan_values.push_back(0.0f);
 		chan_values.push_back(0.0f);
 		chan_values.push_back(0.0f);
+	}
+}
+
+void AtemCHOP::readCommandProductId(vector<uint8_t> data)
+{
+	atem_product_id = readCommandStringUpToNull(data);
+}
+
+void AtemCHOP::readCommandWarning(vector<uint8_t> data)
+{
+	atem_warning = readCommandStringUpToNull(data);
+}
+
+string AtemCHOP::readCommandStringUpToNull(vector<uint8_t> data)
+{
+	// string until null is found
+	vector<uint8_t>::iterator itr = find(data.begin(), data.end(), uint8_t(0));
+	const int index = distance(data.begin(), itr);
+	return string(data.begin(), data.begin() + index);
+}
+
+void AtemCHOP::readCommandInputProperty(vector<uint8_t> data)
+{
+	uint16_t i = word(data[0], data[1]);
+
+	if (i > 0 && i < 1000)
+	{
+		if (i > nofVideoSources)
+		{
+			nofVideoSources = i;
+			topology_values[2] = i;
+			atem_video_source_names.resize(i);
+			atem_video_source_labels.resize(i);
+		}
+
+		vector<uint8_t> name_data(data.begin() + 2, data.begin() + 21);
+		atem_video_source_names[i - 1] = readCommandStringUpToNull(name_data);
+
+		vector<uint8_t> label_data(data.begin() + 22, data.begin() + 25);
+		atem_video_source_labels[i - 1] = readCommandStringUpToNull(label_data);
 	}
 }
 
@@ -683,6 +775,12 @@ extern "C"
 		info->customOPInfo.opLabel->setString("Atem");
 		info->customOPInfo.authorName->setString("Akira Kamikura");
 		info->customOPInfo.authorEmail->setString("akira.kamikura@gmail.com");
+
+		info->customOPInfo.opIcon->setString("ATM");
+
+		info->customOPInfo.minInputs = 0;
+		info->customOPInfo.maxInputs = 1;
+
 	}
 
 	DLLEXPORT CHOP_CPlusPlusBase* CreateCHOPInstance(const OP_NodeInfo* info)
