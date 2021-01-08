@@ -1,6 +1,7 @@
 #pragma once
 
 #include <winsock2.h>
+#include <Ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
 
 #include <vector>
@@ -37,7 +38,29 @@ Udp::~Udp()
 
 void Udp::setup(string ip)
 {
-	WSAStartup(MAKEWORD(2, 0), &wsaData);
+	int err;
+
+	err = WSAStartup(MAKEWORD(2, 0), &wsaData);
+	if (err != 0) {
+		switch (err) {
+		case WSASYSNOTREADY:
+			cout << "WSASYSNOTREADY" << endl;
+			break;
+		case WSAVERNOTSUPPORTED:
+			cout << "WSAVERNOTSUPPORTED" << endl;
+			break;
+		case WSAEINPROGRESS:
+			cout << "WSAEINPROGRESS" << endl;
+			break;
+		case WSAEPROCLIM:
+			cout << "WSAEPROCLIM" << endl;
+			break;
+		case WSAEFAULT:
+			cout << "WSAEFAULT" << endl;
+			break;
+		}
+	}
+
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 
 	u_long blocking = 1;
@@ -47,7 +70,7 @@ void Udp::setup(string ip)
 
 	addr.sin_family = AF_INET;
 	addr.sin_port = htons(port);
-	addr.sin_addr.S_un.S_addr = inet_addr(ip.c_str());
+	inet_pton(AF_INET, ip.c_str(), &addr.sin_addr.S_un.S_addr);
 }
 
 void Udp::teardown()
@@ -58,8 +81,7 @@ void Udp::teardown()
 
 void Udp::sendPacket(vector<uint8_t> packet)
 {
-	int addr_len = sizeof(addr);
-	sendto(sock, string(begin(packet), end(packet)).c_str(), packet.size(), 0, (struct sockaddr*) & addr, addr_len);
+	sendto(sock, string(begin(packet), end(packet)).c_str(), (int)packet.size(), 0, (struct sockaddr*) & addr, (int)sizeof(addr));
 }
 
 vector<uint8_t> Udp::recvPacket()

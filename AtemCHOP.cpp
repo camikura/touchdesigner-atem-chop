@@ -49,22 +49,26 @@ private:
 
 	int nofMEs = 0;
 	int nofSources = 0;
-	int nofVideoSources = 0;
 	int nofCGs = 0;
 	int nofAuxs = 0;
 	int nofDSKs = 0;
 	int nofStingers = 0;
 	int nofDVEs = 0;
 	int nofSSrcs = 0;
+	int nofInputs = 0;
+	int nofMacros = 0;
 
 	vector<string> chan_names;
 	vector<float> chan_values;
 
-	vector<string> topology_names{ "atemNofMEs", "atemNofSoures", "atemNofVideoSoures", "atemNofCGs", "atemNofAuxs", "atemNofDSKs", "atemNofStingers", "atemNofDVEs", "atemNofSSrcs" };
-	vector<float> topology_values{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
+	vector<string> topology_names{ "atemNofMEs", "atemNofSoures", "atemNofCGs", "atemNofAuxs", "atemNofDSKs", "atemNofStingers", "atemNofDVEs", "atemNofSSrcs", "atemNofInputs", "atemNofMacros" };
+	vector<float> topology_values{ 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
 
-	vector<string> atem_video_source_names{ };
-	vector<string> atem_video_source_labels{ };
+	vector<string> atem_input_names{ };
+	vector<string> atem_input_labels{ };
+
+	vector<string> atem_macro_names{ };
+	vector<int> atem_macro_run_status{ };
 
 	uint8_t conn_state;
 
@@ -124,12 +128,15 @@ private:
 	void readCommandProductId(vector<uint8_t> data);
 	void readCommandWarning(vector<uint8_t> data);
 	void readCommandInputProperty(vector<uint8_t> data);
+	void readCommandMacroProperty(vector<uint8_t> data);
+	void readCommandMacroRunStatus(vector<uint8_t> data);
+
 	void readCommandProgramInput(vector<uint8_t> data);
 	void readCommandPreviewInput(vector<uint8_t> data);
 	void readCommandAuxSource(vector<uint8_t> data);
 	void readCommandDownstreamKeyer(vector<uint8_t> data);
 
-	string AtemCHOP::readCommandStringUpToNull(vector<uint8_t> data);
+	string readCommandStringUpToNull(vector<uint8_t> data);
 
 	void parseSessionID(vector<uint8_t> packet);
 	void parseRemotePacketID(vector<uint8_t> packet);
@@ -231,23 +238,22 @@ public:
 		}
 		if (index >= 3)
 		{
-			chan->name->setString(topology_names[index - 3].c_str());
-			chan->value = (float)topology_values[index - 3];
+			chan->name->setString(topology_names[int(static_cast<__int64>(index) - 3)].c_str());
+			chan->value = (float)topology_values[int(static_cast<__int64>(index) - 3)];
 		}
 	}
 
 	bool getInfoDATSize(OP_InfoDATSize* infoSize, void* reserved1)
 	{
-		infoSize->rows = 2 + nofVideoSources;
+		infoSize->rows = 2 + nofInputs + nofMacros;
 		infoSize->cols = 3;
-		// Setting this to false means we'll be assigning values to the table
-		// one row at a time. True means we'll do it one column at a time.
 		infoSize->byColumn = false;
 		return true;
 	}
 
 	void getInfoDATEntries(int32_t index, int32_t nEntries, OP_InfoDATEntries* entries, void* reserved1)
 	{
+		// Product Id
 		if (index == 0)
 		{
 			entries->values[0]->setString("Product Id");
@@ -255,20 +261,36 @@ public:
 			entries->values[2]->setString("");
 		}
 
-		if (index == 1)
+		// Warning
+		else if (index == 1)
 		{
 			entries->values[0]->setString("Warning");
 			entries->values[1]->setString(atem_warning.c_str());
 			entries->values[2]->setString("");
 		}
 
-		if (index >= 2 && index <= 2 + nofVideoSources)
+		// Input Property
+		else if (index < 2 + nofInputs)
 		{
-			char name[10];
-			sprintf(name, "Video%d", index - 1);
-			entries->values[0]->setString(name);
-			entries->values[1]->setString(atem_video_source_names[index - 2].c_str());
-			entries->values[2]->setString(atem_video_source_labels[index - 2].c_str());
+			int i = index - 2;
+			char key[10];
+			sprintf_s(key, "Input%d", int(i + 1));
+			entries->values[0]->setString(key);
+			entries->values[1]->setString(atem_input_names[i].c_str());
+			entries->values[2]->setString(atem_input_labels[i].c_str());
+		}
+
+		// Macro Property
+		else if (index < 2 + nofInputs + nofMacros)
+		{
+			int i = index - 2 - nofInputs;
+			char key[10];
+			sprintf_s(key, "Macro%d", int(i + 1));
+			string s = atem_macro_run_status[i] > 0 ? "running" : "";
+
+			entries->values[0]->setString(key);
+			entries->values[1]->setString(atem_macro_names[i].c_str());
+			entries->values[2]->setString(s.c_str());
 		}
 	}
 
@@ -517,8 +539,6 @@ void AtemCHOP::parseCommand(vector<uint8_t> packet)
 	uint16_t length = word(packet[0], packet[1]);
 	string command = string(packet.begin() + 4, packet.begin() + 8);
 
-	//cout << command << ": " << length << endl;
-
 	vector<uint8_t> data(packet.begin() + 8, packet.begin() + length);
 	readCommand(command, data);
 
@@ -534,6 +554,8 @@ void AtemCHOP::readCommand(string command, vector<uint8_t> data)
 	if (command == "_pin") readCommandProductId(data);
 	if (command == "Warn") readCommandWarning(data);
 	if (command == "InPr") readCommandInputProperty(data);
+	if (command == "MPrp") readCommandMacroProperty(data);
+	if (command == "MRPr") readCommandMacroRunStatus(data);
 
 	if (command == "PrgI") readCommandProgramInput(data);
 	if (command == "PrvI") readCommandPreviewInput(data);
@@ -551,13 +573,21 @@ void AtemCHOP::readCommandTopology(vector<uint8_t> data)
 	nofStingers = (int)data[5];
 	nofDVEs = (int)data[6];
 	nofSSrcs = (int)data[7];
-	topology_values = { (float)nofMEs, (float)nofSources, (float)nofVideoSources, (float)nofCGs, (float)nofAuxs, (float)nofDSKs, (float)nofStingers, (float)nofDVEs, (float)nofSSrcs };
+
+	topology_values[0] = (float)nofMEs;
+	topology_values[1] = (float)nofSources;
+	topology_values[2] = (float)nofCGs;
+	topology_values[3] = (float)nofAuxs;
+	topology_values[4] = (float)nofDSKs;
+	topology_values[5] = (float)nofStingers;
+	topology_values[6] = (float)nofDVEs;
+	topology_values[7] = (float)nofSSrcs;
 
 	// for send command
 	dcut.assign(nofMEs, false);
 	daut.assign(nofMEs, false);
-	cpgi.assign(nofMEs, 0.0f);
-	cpvi.assign(nofMEs, 0.0f);
+	cpgi.assign(nofMEs, 0);
+	cpvi.assign(nofMEs, 0);
 	ddsa.assign(nofDSKs, false);
 
 	// for read command
@@ -611,7 +641,7 @@ string AtemCHOP::readCommandStringUpToNull(vector<uint8_t> data)
 {
 	// string until null is found
 	vector<uint8_t>::iterator itr = find(data.begin(), data.end(), uint8_t(0));
-	const int index = distance(data.begin(), itr);
+	size_t index = distance(data.begin(), itr);
 	return string(data.begin(), data.begin() + index);
 }
 
@@ -621,19 +651,67 @@ void AtemCHOP::readCommandInputProperty(vector<uint8_t> data)
 
 	if (i > 0 && i < 1000)
 	{
-		if (i > nofVideoSources)
+		if (i > nofInputs)
 		{
-			nofVideoSources = i;
-			topology_values[2] = i;
-			atem_video_source_names.resize(i);
-			atem_video_source_labels.resize(i);
+			nofInputs = i;
+			topology_values[8] = i;
+			atem_input_names.resize(i);
+			atem_input_labels.resize(i);
 		}
 
 		vector<uint8_t> name_data(data.begin() + 2, data.begin() + 21);
-		atem_video_source_names[i - 1] = readCommandStringUpToNull(name_data);
+		atem_input_names[i - 1] = readCommandStringUpToNull(name_data);
 
 		vector<uint8_t> label_data(data.begin() + 22, data.begin() + 25);
-		atem_video_source_labels[i - 1] = readCommandStringUpToNull(label_data);
+		atem_input_labels[i - 1] = readCommandStringUpToNull(label_data);
+	}
+}
+
+void AtemCHOP::readCommandMacroRunStatus(vector<uint8_t> data)
+{
+	uint16_t i = word(data[2], data[3]);
+
+	if (i == 65535)
+	{
+		fill(atem_macro_run_status.begin(), atem_macro_run_status.end(), 0);
+	}
+	else
+	{
+		if (i >= nofMacros)
+		{
+			nofMacros = int(i + 1);
+			topology_values[9] = (float)nofMacros;
+			atem_macro_names.resize(nofMacros);
+			atem_macro_run_status.resize(nofMacros);
+		}
+
+		uint16_t s = (int)data[0];
+		atem_macro_run_status[i] = s;
+	}
+}
+
+void AtemCHOP::readCommandMacroProperty(vector<uint8_t> data)
+{
+	int i = (int)data[1];
+	int v = (int)data[2];
+
+	if (i >= nofMacros)
+	{
+		nofMacros = int(i + 1);
+		topology_values[9] = (float)nofMacros;
+		atem_macro_names.resize(nofMacros);
+		atem_macro_run_status.resize(nofMacros);
+	}
+
+	if (v > 0)
+	{
+		uint16_t name_length = word(data[4], data[5]);
+		string name = string(data.begin() + 8, data.begin() + 8 + name_length);
+		atem_macro_names[i] = name;
+	}
+	else
+	{
+		atem_macro_names[i] = "";
 	}
 }
 
@@ -666,9 +744,9 @@ void AtemCHOP::readCommandDownstreamKeyer(vector<uint8_t> data)
 	bool inauto = (data[3] & 0x01) > 0;
 	int remain = (int)data[5];
 	chan_values[i] = (float)onair;
-	chan_values[i+1] = (float)intran;
-	chan_values[i+2] = (float)inauto;
-	chan_values[i+3] = (float)remain;
+	chan_values[static_cast<__int64>(i)  +1] = (float)intran;
+	chan_values[static_cast<__int64>(i) + 2] = (float)inauto;
+	chan_values[static_cast<__int64>(i) + 3] = (float)remain;
 }
 
 void AtemCHOP::sendCommand(string command, vector<uint8_t> data)
@@ -685,14 +763,14 @@ void AtemCHOP::sendCommand(string command, vector<uint8_t> data)
 	packet[1] = size & 0xff;
 	packet[10] = local_packet_id >> 0x08;
 	packet[11] = local_packet_id & 0xff;
-	packet[12] = (8 + command.size()) >> 0x08;
-	packet[13] = (8 + command.size()) & 0xff;
+	packet[12] = uint8_t((8 + command.size()) >> 0x08);
+	packet[13] = uint8_t((8 + command.size()) & 0xff);
 
 	for (int i = 0; i < command.size(); i++) {
-		packet[int(i+16)] = command[i];
+		packet[static_cast<__int64>(i) + 16] = command[i];
 	}
 	for (int i = 0; i < data.size(); i++) {
-		packet[int(i+20)] = data[i];
+		packet[static_cast<__int64>(i) + 20] = data[i];
 	}
 
 	sendPacket(packet);
