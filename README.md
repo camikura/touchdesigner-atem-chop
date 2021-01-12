@@ -36,6 +36,9 @@ To send CUT to M/E1, the channel name is dcut1.
 | cdsl1 | Set Downstream Keyer | value is On(1) or Off(0) |
 | ddsa1 | Downstream Keyer Auto Transition | pulse |
 
+The 1 at the end of the command is the index of the M/E.
+When operating 2nd M/E, change that to 2.
+
 ## Tutorial Movie
 https://youtu.be/dTgaoj8VZiA
 
