@@ -17,6 +17,25 @@ Derivative Developers: Make sure the virtual function order
 stays the same, otherwise changes won't be backwards compatible
 ********/
 
+/* Shared Use License: This file is owned by Derivative Inc. (Derivative)
+* and can only be used, and/or modified for use, in conjunction with
+* Derivative's TouchDesigner software, and only if you are a licensee who has
+* accepted Derivative's TouchDesigner license or assignment agreement
+* (which also govern the use of this file). You may share or redistribute
+* a modified version of this file provided the following conditions are met:
+*
+* 1. The shared file or redistribution must retain the information set out
+* above and this list of conditions.
+* 2. Derivative's name (Derivative Inc.) or its trademarks may not be used
+* to endorse or promote products derived from this file without specific
+* prior written permission from Derivative.
+*/
+
+/*******
+Derivative Developers: Make sure the virtual function order
+stays the same, otherwise changes won't be backwards compatible
+********/
+
 
 #ifndef __CPlusPlus_Common
 #define __CPlusPlus_Common
@@ -42,7 +61,39 @@ stays the same, otherwise changes won't be backwards compatible
 	typedef _object PyObject;
 #endif
 
+class OP_NodeInfo;
+
+// These are the definitions for the C-functions that are used to
+// load the library and create instances of the object you define
+class CHOP_PluginInfo;
+class CHOP_CPlusPlusBase;
+typedef void (__cdecl *FILLCHOPPLUGININFO)(CHOP_PluginInfo *info);
+typedef CHOP_CPlusPlusBase* (__cdecl *CREATECHOPINSTANCE)(const OP_NodeInfo*);
+typedef void (__cdecl *DESTROYCHOPINSTANCE)(CHOP_CPlusPlusBase*);
+
+class DAT_PluginInfo;
+class DAT_CPlusPlusBase;
+typedef void(__cdecl *FILLDATPLUGININFO)(DAT_PluginInfo *info);
+typedef DAT_CPlusPlusBase* (__cdecl *CREATEDATINSTANCE)(const OP_NodeInfo*);
+typedef void(__cdecl *DESTROYDATINSTANCE)(DAT_CPlusPlusBase*);
+
+class TOP_PluginInfo;
+class TOP_CPlusPlusBase;
+class TOP_Context;
+typedef void (__cdecl *FILLTOPPLUGININFO)(TOP_PluginInfo* info);
+typedef TOP_CPlusPlusBase* (__cdecl *CREATETOPINSTANCE)(const OP_NodeInfo*, TOP_Context*);
+typedef void (__cdecl *DESTROYTOPINSTANCE)(TOP_CPlusPlusBase*, TOP_Context*);
+
+class SOP_PluginInfo;
+class SOP_CPlusPlusBase;
+typedef void(__cdecl *FILLSOPPLUGININFO)(SOP_PluginInfo *info);
+typedef SOP_CPlusPlusBase* (__cdecl *CREATESOPINSTANCE)(const OP_NodeInfo*);
+typedef void(__cdecl *DESTROYSOPINSTANCE)(SOP_CPlusPlusBase*);
+
+
 struct cudaArray;
+
+#pragma pack(push, 8)
 
 enum class OP_CPUMemPixelType : int32_t
 {
@@ -136,7 +187,15 @@ public:
 	// It should be left unchanged if CPython isn't being used in this plugin.
 	OP_String*		pythonVersion;
 
-	int32_t			reserved[98];
+	// False by default. If this is on the node will cook at least once
+	// when the project it is contained within starts up, or when the node
+	// is created.
+	// For pure output nodes that are using 'cookEveryFrame=true' in their
+	// GeneralInfo, setting this to 'true' is required to kick-start the
+	// every-frame cooking.
+	bool			cookOnStart = false;
+
+	int32_t			reserved[97];
 };
 
 
@@ -172,9 +231,9 @@ public:
 	const char*		opPath;
 	uint32_t		opId;
 
-	int32_t         numRows;
-	int32_t         numCols;
-	bool            isTable;
+	int32_t			numRows;
+	int32_t			numCols;
+	bool			isTable;
 
 	// data, referenced by (row,col), which will be a const char* for the
 	// contents of the cell
@@ -191,7 +250,7 @@ public:
 	// The number of times this node has cooked
 	int64_t			totalCooks;
 
-	int32_t         reserved[18];
+	int32_t			reserved[18];
 };
 
 
@@ -934,6 +993,14 @@ public:
 	// attribute 'Cd'
 	virtual bool			hasColors() const = 0;
 
+	// Returns true if the position lies inside the geometry.
+	virtual bool			isInside(const Position &pos) = 0;
+
+	// Returns true if the ray intersected with the geometry
+	virtual bool			sendRay(const Position &pos, const Vector &dir, 
+								Position &hitPostion, float &hitLength, Vector &hitNormal,
+								float &hitU, float &hitV, int &hitPrimitiveIndex) = 0;
+
 	// Returns the SOP_PrimitiveInfo with primIndex
 	const SOP_PrimitiveInfo
 	getPrimitive(int32_t primIndex) const
@@ -943,8 +1010,6 @@ public:
 
 	// Returns the full list of all the point indices for all primitives.
 	// The primitives are stored back to back in this array.
-	// This is a faster but harder way to work with primitives than
-	// getPrimPointIndices()
 	const int32_t*
 	getAllPrimPointIndices()
 	{
@@ -957,7 +1022,7 @@ public:
 	// The number of times this node has cooked
 	int64_t			totalCooks;
 
-	int32_t			reserved[98];
+	int32_t			reserved[97];
 };
 
 
@@ -1077,18 +1142,18 @@ public:
 	virtual double		getParDouble(const char* name, int32_t index = 0) const = 0;
 
 	// for multiple values: returns True on success/false otherwise
-	virtual bool        getParDouble2(const char* name, double &v0, double &v1) const = 0;
-	virtual bool        getParDouble3(const char* name, double &v0, double &v1, double &v2) const = 0;
-	virtual bool        getParDouble4(const char* name, double &v0, double &v1, double &v2, double &v3) const = 0;
+	virtual bool		getParDouble2(const char* name, double &v0, double &v1) const = 0;
+	virtual bool		getParDouble3(const char* name, double &v0, double &v1, double &v2) const = 0;
+	virtual bool		getParDouble4(const char* name, double &v0, double &v1, double &v2, double &v3) const = 0;
 
 
 	// returns the requested value
 	virtual int32_t		getParInt(const char* name, int32_t index = 0) const = 0;
 
 	// for multiple values: returns True on success/false otherwise
-	virtual bool        getParInt2(const char* name, int32_t &v0, int32_t &v1) const = 0;
-	virtual bool        getParInt3(const char* name, int32_t &v0, int32_t &v1, int32_t &v2) const = 0;
-	virtual bool        getParInt4(const char* name, int32_t &v0, int32_t &v1, int32_t &v2, int32_t &v3) const = 0;
+	virtual bool		getParInt2(const char* name, int32_t &v0, int32_t &v1) const = 0;
+	virtual bool		getParInt3(const char* name, int32_t &v0, int32_t &v1, int32_t &v2) const = 0;
+	virtual bool		getParInt4(const char* name, int32_t &v0, int32_t &v1, int32_t &v2, int32_t &v3) const = 0;
 
 	// returns the requested value
 	// this value is valid until the parameters are rebuilt or it is called with the same parameter name.
@@ -1335,7 +1400,18 @@ public:
 	virtual OP_ParAppendResult		appendPython(const OP_StringParameter &sp) = 0;
 
 
+	virtual OP_ParAppendResult		appendOP(const OP_StringParameter &sp) = 0;
+	virtual OP_ParAppendResult		appendCOMP(const OP_StringParameter &sp) = 0;
+	virtual OP_ParAppendResult		appendMAT(const OP_StringParameter &sp) = 0;
+	virtual OP_ParAppendResult		appendPanelCOMP(const OP_StringParameter &sp) = 0;
+
+	virtual OP_ParAppendResult		appendHeader(const OP_StringParameter &np) = 0;
+	virtual OP_ParAppendResult		appendMomentary(const OP_NumericParameter &np) = 0;
+	virtual OP_ParAppendResult		appendWH(const OP_NumericParameter &np) = 0;
+
 };
+
+#pragma pack(pop)
 
 static_assert(offsetof(OP_CustomOPInfo,	opType) == 0, "Incorrect Alignment");
 static_assert(offsetof(OP_CustomOPInfo,	opLabel) == 8, "Incorrect Alignment");

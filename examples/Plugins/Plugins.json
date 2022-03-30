@@ -2,11 +2,12 @@
     "Version": 1,
     "AllowedPlugins": {
         "b0a5860a": {
-            "ComputerName": "RB15",
+            "ComputerName": "CAMIKURA-RB15",
             "Plugins": {
                 "C:/Users/camikura/dev/touchdesigner-atem-chop/examples/Plugins/AtemCHOP.dll": {
                     "Hashes": [
-                        "22gQqaCGPSsvJ/fFg/z0PlA1fd6/n0TJM9fVSiF6qVVBlUsO11JGj7Ltawec09qKJFh05dOugANhvT/hfBNYxw+k/766R+fUlvnvQAbKfVAHdX+1azPlqrgaquQKwkxB"
+                        "22gQqaCGPSsvJ/fFg/z0PlA1fd6/n0TJM9fVSiF6qVVBlUsO11JGj7Ltawec09qKJFh05dOugANhvT/hfBNYxw+k/766R+fUlvnvQAbKfVAHdX+1azPlqrgaquQKwkxB",
+                        "FYiIvWXBGjJUqgcFaixNtEiQtO5V9G72yjaKrP7l4PeMr6q9JqqSIGCHZiw4GF3QrNzpScC9oiKmERubiivVEVLU0xe2tYw1Wv6ZnYvTYoP6Dyu9u1xz8uYpqbsoVBPK"
                     ],
                     "AuthorName": "Akira Kamikura",
                     "AuthorEmail": "akira.kamikura@gmail.com"

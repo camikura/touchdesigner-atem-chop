@@ -37,6 +37,7 @@
 
 #include "CPlusPlus_Common.h"
 
+#pragma pack(push, 8)
 
 class CHOP_CPlusPlusBase;
 
@@ -67,21 +68,19 @@ public:
 
 };
 
-
-
-// These are the definitions for the C-functions that are used to
-// load the library and create instances of the object you define
-typedef void (__cdecl *FILLCHOPPLUGININFO)(CHOP_PluginInfo *info);
-typedef CHOP_CPlusPlusBase* (__cdecl *CREATECHOPINSTANCE)(const OP_NodeInfo*);
-typedef void (__cdecl *DESTROYCHOPINSTANCE)(CHOP_CPlusPlusBase*);
-
-
 class CHOP_GeneralInfo
 {
 public:
 	// Set this to true if you want the CHOP to cook every frame, even
 	// if none of it's inputs/parameters are changing
 	// DEFAULT: false
+	// Important:
+	// If the node may not be viewed/used by other nodes in the file,
+	// such as a TCP network output node that isn't viewed in perform mode,
+	// you should set cookOnStart = true in OP_CustomOPInfo.
+	// That will ensure cooking is kick-started for this node.
+	// Note that this fix only works for Custom Operators, not
+	// cases where the .dll is loaded into CPlusPlus CHOP.
 
 	bool			cookEveryFrame;
 
@@ -201,9 +200,9 @@ public:
 
 /***** FUNCTION CALL ORDER DURING INITIALIZATION ******/
 /*
-    When the TOP loads the dll the functions will be called in this order
+	When the TOP loads the dll the functions will be called in this order
 
-    setupParameters(OP_ParameterManager* m);
+	setupParameters(OP_ParameterManager* m);
 
 */
 
@@ -360,7 +359,7 @@ public:
 
 
 	// Override these methods if you want to define specfic parameters
-	virtual void        
+	virtual void
 	setupParameters(OP_ParameterManager* manager, void* reserved1)
 	{
 	}
@@ -397,6 +396,8 @@ private:
 	int32_t			reserved[400];
 
 };
+
+#pragma pack(pop)
 
 static_assert(offsetof(CHOP_PluginInfo, apiVersion) == 0, "Incorrect Alignment");
 static_assert(offsetof(CHOP_PluginInfo, customOPInfo) == 408, "Incorrect Alignment");
