@@ -3,4 +3,4 @@ project(AtemCHOP)
 
 include_directories(include)
 
-add_library(AtemCHOP MODULE src/main.cpp src/udp.cpp)
+add_library(AtemCHOP MODULE src/main.cpp src/atem.cpp src/udp.cpp)
