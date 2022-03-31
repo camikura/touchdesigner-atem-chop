@@ -1,3 +1,4 @@
 .git/
 build/
 examples/Plugins/Plugins.json
+debug.toe
