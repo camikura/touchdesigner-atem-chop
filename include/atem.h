@@ -120,8 +120,6 @@ struct Atem {
   void readCommandAuxSource(vector<uint8_t> data);
   void readCommandDownstreamKeyer(vector<uint8_t> data);
 
-  string readCommandStringUpToNull(vector<uint8_t> data);
-
   void parseSessionID(vector<uint8_t> packet);
   void parseRemotePacketID(vector<uint8_t> packet);
 
