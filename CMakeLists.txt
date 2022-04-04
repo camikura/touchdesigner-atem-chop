@@ -3,4 +3,8 @@ project(AtemCHOP)
 
 include_directories(include)
 
-add_library(AtemCHOP MODULE src/main.cpp src/atem.cpp src/udp.cpp)
+add_library(AtemCHOP MODULE src/main.cc src/atem.cc src/udp.cc)
+
+if(MSVC)
+  target_compile_options(AtemCHOP PUBLIC "/std:c++latest")
+endif()

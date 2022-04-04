@@ -59,7 +59,7 @@ void Atem::stop() {
 
   if (send_thread.joinable()) send_thread.join();
 
-  init();
+  this->init();
 
   udp.teardown();
 }
@@ -230,18 +230,11 @@ void Atem::readCommandTopology(vector<uint8_t> data) {
 }
 
 void Atem::readCommandProductId(vector<uint8_t> data) {
-  atem_product_id = readCommandStringUpToNull(data);
+  atem_product_id = string((const char*)data.data());
 }
 
 void Atem::readCommandWarning(vector<uint8_t> data) {
-  atem_warning = readCommandStringUpToNull(data);
-}
-
-string Atem::readCommandStringUpToNull(vector<uint8_t> data) {
-  // string until null is found
-  vector<uint8_t>::iterator itr = find(data.begin(), data.end(), uint8_t(0));
-  size_t index = distance(data.begin(), itr);
-  return string(data.begin(), data.begin() + index);
+  atem_warning = string((const char*)data.data());
 }
 
 void Atem::readCommandInputProperty(vector<uint8_t> data) {
@@ -256,10 +249,10 @@ void Atem::readCommandInputProperty(vector<uint8_t> data) {
     }
 
     vector<uint8_t> name_data(data.begin() + 2, data.begin() + 21);
-    atem_input_names[i - 1] = readCommandStringUpToNull(name_data);
+    atem_input_names[i - 1] = string((const char*)name_data.data());
 
     vector<uint8_t> label_data(data.begin() + 22, data.begin() + 25);
-    atem_input_labels[i - 1] = readCommandStringUpToNull(label_data);
+    atem_input_labels[i - 1] = string((const char*)label_data.data());
   }
 }
 

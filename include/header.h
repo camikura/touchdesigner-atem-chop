@@ -30,5 +30,4 @@ class AtemCHOP : public CHOP_CPlusPlusBase {
   void getInfoDATEntries(int32_t index, int32_t nEntries,
                          OP_InfoDATEntries* entries, void* reserved1);
   void setupParameters(OP_ParameterManager* manager, void* reserved1);
-  // void pulsePressed(const char* name, void* reserved1);
 };
