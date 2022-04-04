@@ -142,8 +142,6 @@ void AtemCHOP::setupParameters(OP_ParameterManager* manager, void* reserved1) {
   }
 }
 
-// void AtemCHOP::pulsePressed(const char* name, void* reserved1) {}
-
 void AtemCHOP::executeHandleParameters(const OP_Inputs* inputs) {
   string ip = inputs->getParString("Atemip");
   if (atem->atem_ip != ip || atem->active == -1) {
