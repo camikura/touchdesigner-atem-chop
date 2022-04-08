@@ -4,8 +4,6 @@
 #include "CPlusPlus_Common.h"
 #include "atem.h"
 
-using namespace std;
-
 class AtemCHOP : public CHOP_CPlusPlusBase {
  private:
   Atem* atem;

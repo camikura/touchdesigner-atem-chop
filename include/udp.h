@@ -9,8 +9,6 @@
 
 #define port 9910
 
-using namespace std;
-
 struct Udp {
  private:
   WSAData wsaData;
@@ -22,10 +20,10 @@ struct Udp {
   Udp();
   ~Udp();
 
-  void setup(string ip);
+  void setup(std::string ip);
   void teardown();
 
-  void sendPacket(vector<uint8_t> packet);
+  void sendPacket(std::vector<uint8_t> packet);
 
-  vector<uint8_t> recvPacket();
+  std::vector<uint8_t> recvPacket();
 };

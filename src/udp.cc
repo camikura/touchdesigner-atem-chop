@@ -4,26 +4,26 @@ Udp::Udp(){};
 
 Udp::~Udp() { teardown(); }
 
-void Udp::setup(string ip) {
+void Udp::setup(std::string ip) {
   int err;
 
   err = WSAStartup(MAKEWORD(2, 0), &wsaData);
   if (err != 0) {
     switch (err) {
       case WSASYSNOTREADY:
-        cout << "WSASYSNOTREADY" << endl;
+        std::cout << "WSASYSNOTREADY" << std::endl;
         break;
       case WSAVERNOTSUPPORTED:
-        cout << "WSAVERNOTSUPPORTED" << endl;
+        std::cout << "WSAVERNOTSUPPORTED" << std::endl;
         break;
       case WSAEINPROGRESS:
-        cout << "WSAEINPROGRESS" << endl;
+        std::cout << "WSAEINPROGRESS" << std::endl;
         break;
       case WSAEPROCLIM:
-        cout << "WSAEPROCLIM" << endl;
+        std::cout << "WSAEPROCLIM" << std::endl;
         break;
       case WSAEFAULT:
-        cout << "WSAEFAULT" << endl;
+        std::cout << "WSAEFAULT" << std::endl;
         break;
     }
   }
@@ -45,18 +45,18 @@ void Udp::teardown() {
   WSACleanup();
 }
 
-void Udp::sendPacket(vector<uint8_t> packet) {
-  sendto(sock, string(begin(packet), end(packet)).c_str(), (int)packet.size(),
-         0, (struct sockaddr*)&addr, (int)sizeof(addr));
+void Udp::sendPacket(std::vector<uint8_t> packet) {
+  sendto(sock, std::string(std::begin(packet), std::end(packet)).c_str(),
+         (int)packet.size(), 0, (struct sockaddr*)&addr, (int)sizeof(addr));
 }
 
-vector<uint8_t> Udp::recvPacket() {
+std::vector<uint8_t> Udp::recvPacket() {
   int addr_len = sizeof(addr);
   int buf_len = sizeof(recv_buf);
   int size =
       recvfrom(sock, recv_buf, buf_len, 0, (struct sockaddr*)&addr, &addr_len);
 
-  vector<uint8_t> packet;
+  std::vector<uint8_t> packet;
   if (size > 0) {
     packet.assign(recv_buf, recv_buf + size);
   }

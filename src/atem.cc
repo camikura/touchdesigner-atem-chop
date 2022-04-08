@@ -1,49 +1,99 @@
 #include "atem.h"
 
 Atem::Atem() {}
-
 Atem::~Atem() {}
 
-bool Atem::isClosed() { return this->conn_state == connStateClosed; }
-bool Atem::isConnected() { return this->conn_state == connStateConnected; }
-bool Atem::isConnecting() { return this->conn_state == connStateConnecting; }
+uint16_t Atem::session_id() const { return session_id_; }
+uint16_t Atem::last_session_id() const { return last_session_id_; }
+uint16_t Atem::remote_packet_id() const { return remote_packet_id_; }
+uint16_t Atem::last_remote_packet_id() const { return last_remote_packet_id_; }
+uint16_t Atem::local_packet_id() const { return local_packet_id_; }
+
+std::string Atem::atem_ip() const { return atem_ip_; }
+int Atem::atem_port() const { return atem_port_; }
+int Atem::active() const { return active_; }
+time_t Atem::last_recv_packet_t() const { return last_recv_packet_t_; }
+time_t Atem::last_send_packet_t() const { return last_send_packet_t_; }
+
+std::string Atem::atem_product_id() const { return atem_product_id_; }
+std::string Atem::atem_warning() const { return atem_warning_; }
+
+int Atem::n_of_mes() const { return n_of_mes_; }
+int Atem::n_of_auxs() const { return n_of_auxs_; }
+int Atem::n_of_dsks() const { return n_of_dsks_; }
+int Atem::n_of_inputs() const { return n_of_inputs_; }
+int Atem::n_of_macros() const { return n_of_macros_; }
+
+std::vector<std::string> Atem::chan_names() const { return chan_names_; }
+std::vector<float> Atem::chan_values() const { return chan_values_; }
+
+std::vector<std::string> Atem::topology_names() const {
+  return topology_names_;
+}
+std::vector<float> Atem::topology_values() const { return topology_values_; }
+
+std::vector<std::string> Atem::input_names() const { return input_names_; }
+std::vector<std::string> Atem::input_labels() const { return input_labels_; }
+
+std::vector<std::string> Atem::macro_names() const { return macro_names_; }
+std::vector<int> Atem::macro_run_status() const { return macro_run_status_; }
+
+bool Atem::dcut(uint8_t me) const { return dcut_[me]; }
+bool Atem::daut(uint8_t me) const { return dcut_[me]; }
+uint16_t Atem::cpgi(uint8_t me) const { return cpgi_[me]; }
+uint16_t Atem::cpvi(uint8_t me) const { return cpvi_[me]; }
+uint16_t Atem::caus(uint8_t index) const { return caus_[index]; }
+bool Atem::cdsl(uint8_t keyer) const { return cdsl_[keyer]; }
+bool Atem::ddsa(uint8_t keyer) const { return ddsa_[keyer]; }
+
+// mutators
+void Atem::atem_ip(std::string ip) { atem_ip_ = ip; }
+
+void Atem::dcut(uint8_t me, bool flag) { dcut_[me] = flag; }
+void Atem::daut(uint8_t me, bool flag) { dcut_[me] = flag; }
+void Atem::cpgi(uint8_t me, uint16_t source) { cpgi_[me] = source; }
+void Atem::cpvi(uint8_t me, uint16_t source) { cpvi_[me] = source; }
+void Atem::caus(uint8_t index, uint16_t source) { caus_[index] = source; }
+void Atem::cdsl(uint8_t keyer, bool onair) { cdsl_[keyer] = onair; }
+void Atem::ddsa(uint8_t keyer, bool flag) { ddsa_[keyer] = flag; }
+
+bool Atem::isClosed() { return conn_state_ == connStateClosed; }
+bool Atem::isConnected() { return conn_state_ == connStateConnected; }
+bool Atem::isConnecting() { return conn_state_ == connStateConnecting; }
 
 void Atem::init() {
-  session_id = 0;
-  last_session_id = 0;
+  session_id_ = 0;
+  last_session_id_ = 0;
+  remote_packet_id_ = 0;
+  last_remote_packet_id_ = 0;
+  local_packet_id_ = 0;
 
-  remote_packet_id = 0;
-  last_remote_packet_id = 0;
+  conn_state_ = connStateClosed;
 
-  local_packet_id = 0;
-
-  conn_state = connStateClosed;
-
-  chan_values.assign(chan_values.size(), 0.0f);
-  topology_values.assign(topology_values.size(), 0.0f);
+  chan_values_.assign(chan_values_.size(), 0.0f);
+  topology_values_.assign(topology_values_.size(), 0.0f);
 }
 
 void Atem::start() {
-  cout << "thread start" << endl;
-  active = true;
+  std::cout << "thread start" << std::endl;
+  active_ = true;
 
-  udp.setup(atem_ip);
+  udp_.setup(atem_ip_);
 
-  recv_thread = thread([this]() {
-    while (active) {
-      vector<unsigned char> packet = udp.recvPacket();
+  recv_thread_ = std::thread([this]() {
+    while (active_) {
+      std::vector<unsigned char> packet = udp_.recvPacket();
       if (packet.size() > 0) {
         parsePacket(packet);
       }
     }
   });
 
-  send_thread = thread([this]() {
-    while (active) {
-      while (!que.empty()) {
-        // cout << "send packet: " << session_id << endl;
-        udp.sendPacket(que.front());
-        que.pop();
+  send_thread_ = std::thread([this]() {
+    while (active_) {
+      while (!sender_que_.empty()) {
+        udp_.sendPacket(sender_que_.front());
+        sender_que_.pop();
       }
     }
   });
@@ -52,74 +102,69 @@ void Atem::start() {
 }
 
 void Atem::stop() {
-  cout << "thread stop" << endl;
-  active = false;
+  std::cout << "thread stop" << std::endl;
+  active_ = false;
 
-  if (recv_thread.joinable()) recv_thread.join();
+  if (recv_thread_.joinable()) recv_thread_.join();
+  if (send_thread_.joinable()) send_thread_.join();
 
-  if (send_thread.joinable()) send_thread.join();
+  init();
 
-  this->init();
-
-  udp.teardown();
+  udp_.teardown();
 }
 
-void Atem::sendPacket(vector<uint8_t> packet) {
-  packet[2] = uint8_t(session_id >> 0x08);
-  packet[3] = uint8_t(session_id & 0xff);
+void Atem::sendPacket(std::vector<uint8_t> packet) {
+  packet[2] = uint8_t(session_id_ >> 0x08);
+  packet[3] = uint8_t(session_id_ & 0xff);
 
-  que.push(packet);
+  sender_que_.push(packet);
 
   // for reconnect
-  last_send_packet_t = time(NULL);
+  last_send_packet_t_ = time(NULL);
 }
 
 void Atem::sendPacketStart() {
-  // cout << "send packet for start" << endl;
-  sendPacket(start_packet);
-  conn_state = connStateConnecting;
+  sendPacket(start_packet_);
+  conn_state_ = connStateConnecting;
 }
 
 void Atem::sendPacketAck() {
-  // cout << "send packet for ack: " << remote_packet_id << endl;
-  vector<uint8_t> packet(ack_packet);
+  std::vector<uint8_t> packet(ack_packet_);
 
-  packet[4] = uint8_t(remote_packet_id >> 0x08);
-  packet[5] = uint8_t(remote_packet_id & 0xff);
+  packet[4] = uint8_t(remote_packet_id_ >> 0x08);
+  packet[5] = uint8_t(remote_packet_id_ & 0xff);
 
-  this->sendPacket(packet);
+  sendPacket(packet);
 }
 
-void Atem::parseSessionID(vector<unsigned char> packet) {
+void Atem::parseSessionID(std::vector<unsigned char> packet) {
   uint16_t sid = word(packet[2], packet[3]);
-  if (sid > last_session_id) {
-    session_id = sid;
-    last_session_id = sid;
+  if (sid > last_session_id_) {
+    session_id_ = sid;
+    last_session_id_ = sid;
   }
 }
 
-void Atem::parseRemotePacketID(vector<unsigned char> packet) {
+void Atem::parseRemotePacketID(std::vector<unsigned char> packet) {
   uint16_t rid = word(packet[10], packet[11]);
-  if (rid > last_remote_packet_id) {
-    remote_packet_id = rid;
-    last_remote_packet_id = rid;
+  if (rid > last_remote_packet_id_) {
+    remote_packet_id_ = rid;
+    last_remote_packet_id_ = rid;
   }
 }
 
-void Atem::parsePacket(vector<unsigned char> packet) {
+void Atem::parsePacket(std::vector<unsigned char> packet) {
   parseSessionID(packet);
   parseRemotePacketID(packet);
 
   uint8_t flags = packet[0] >> 3;
 
   if ((flags & flagHelloPacket) && isConnecting()) {
-    // cout << "received hello" << endl;
     sendPacketAck();
   }
 
   if ((flags & flagAck) && isConnecting()) {
-    conn_state = connStateConnected;
-    // cout << "received ack: " << session_id << endl;
+    conn_state_ = connStateConnected;
   }
 
   if ((flags & flagAckRequest) && !isClosed()) {
@@ -127,9 +172,7 @@ void Atem::parsePacket(vector<unsigned char> packet) {
       return;
     }
 
-    last_recv_packet_t = time(NULL);
-    // cout << "received ack request: " << session_id << " : " <<
-    // remote_packet_id << endl;
+    last_recv_packet_t_ = time(NULL);
     sendPacketAck();
 
     if (packet.size() > 12) {
@@ -139,11 +182,11 @@ void Atem::parsePacket(vector<unsigned char> packet) {
   }
 }
 
-void Atem::parseCommand(vector<uint8_t> packet) {
+void Atem::parseCommand(std::vector<uint8_t> packet) {
   uint16_t length = word(packet[0], packet[1]);
-  string command = string(packet.begin() + 4, packet.begin() + 8);
+  std::string command = std::string(packet.begin() + 4, packet.begin() + 8);
 
-  vector<uint8_t> data(packet.begin() + 8, packet.begin() + length);
+  std::vector<uint8_t> data(packet.begin() + 8, packet.begin() + length);
   readCommand(command, data);
 
   if (packet.size() > length) {
@@ -152,190 +195,190 @@ void Atem::parseCommand(vector<uint8_t> packet) {
   }
 }
 
-void Atem::readCommand(string command, vector<uint8_t> data) {
+void Atem::readCommand(std::string command, std::vector<uint8_t> data) {
   if (command == "_top") readCommandTopology(data);
   if (command == "_pin") readCommandProductId(data);
   if (command == "Warn") readCommandWarning(data);
   if (command == "InPr") readCommandInputProperty(data);
   if (command == "MPrp") readCommandMacroProperty(data);
   if (command == "MRPr") readCommandMacroRunStatus(data);
-
   if (command == "PrgI") readCommandProgramInput(data);
   if (command == "PrvI") readCommandPreviewInput(data);
   if (command == "AuxS") readCommandAuxSource(data);
   if (command == "DskS") readCommandDownstreamKeyer(data);
 }
 
-void Atem::readCommandTopology(vector<uint8_t> data) {
-  nofMEs = (int)data[0];
-  nofSources = (int)data[1];
-  nofCGs = (int)data[2];
-  nofAuxs = (int)data[3];
-  nofDSKs = (int)data[4] | 0x02;
-  nofStingers = (int)data[5];
-  nofDVEs = (int)data[6];
-  nofSSrcs = (int)data[7];
+void Atem::readCommandTopology(std::vector<uint8_t> data) {
+  n_of_mes_ = (int)data[0];
+  n_of_sources_ = (int)data[1];
+  n_of_cgs_ = (int)data[2];
+  n_of_auxs_ = (int)data[3];
+  n_of_dsks_ = (int)data[4] | 0x02;
+  n_of_stingers_ = (int)data[5];
+  n_of_dves_ = (int)data[6];
+  n_of_ssrcs_ = (int)data[7];
 
-  topology_values[0] = (float)nofMEs;
-  topology_values[1] = (float)nofSources;
-  topology_values[2] = (float)nofCGs;
-  topology_values[3] = (float)nofAuxs;
-  topology_values[4] = (float)nofDSKs;
-  topology_values[5] = (float)nofStingers;
-  topology_values[6] = (float)nofDVEs;
-  topology_values[7] = (float)nofSSrcs;
+  topology_values_[0] = (float)n_of_mes_;
+  topology_values_[1] = (float)n_of_sources_;
+  topology_values_[2] = (float)n_of_cgs_;
+  topology_values_[3] = (float)n_of_auxs_;
+  topology_values_[4] = (float)n_of_dsks_;
+  topology_values_[5] = (float)n_of_stingers_;
+  topology_values_[6] = (float)n_of_dves_;
+  topology_values_[7] = (float)n_of_ssrcs_;
 
   // for send command
-  dcut.assign(nofMEs, false);
-  daut.assign(nofMEs, false);
-  cpgi.assign(nofMEs, 0);
-  cpvi.assign(nofMEs, 0);
-  ddsa.assign(nofDSKs, false);
+  dcut_.assign(n_of_mes_, false);
+  daut_.assign(n_of_mes_, false);
+  cpgi_.assign(n_of_mes_, 0);
+  cpvi_.assign(n_of_mes_, 0);
+  ddsa_.assign(n_of_dsks_, false);
 
   // for read command
-  chan_names.clear();
-  chan_values.clear();
-  for (int i = 0; i < nofMEs; i++) {
-    chan_names.push_back("prgi1");
-    chan_values.push_back(0.0f);
+  chan_names_.clear();
+  chan_values_.clear();
+  for (int i = 0; i < n_of_mes_; i++) {
+    chan_names_.push_back("prgi1");
+    chan_values_.push_back(0.0f);
   }
-  for (int i = 0; i < nofMEs; i++) {
-    chan_names.push_back("prvi1");
-    chan_values.push_back(0.0f);
+  for (int i = 0; i < n_of_mes_; i++) {
+    chan_names_.push_back("prvi1");
+    chan_values_.push_back(0.0f);
   }
-  for (int i = 0; i < nofAuxs; i++) {
-    chan_names.push_back("auxs1");
-    chan_values.push_back(0.0f);
+  for (int i = 0; i < n_of_auxs_; i++) {
+    chan_names_.push_back("auxs1");
+    chan_values_.push_back(0.0f);
   }
-  for (int i = 0; i < nofDSKs; i++) {
-    chan_names.push_back("dsks1");
-    oss << "dsks" << (i + 1) << "_intran";
-    chan_names.push_back(oss.str());
-    oss.str("");
-    oss.clear();
-    oss << "dsks" << (i + 1) << "_inauto";
-    chan_names.push_back(oss.str());
-    oss.str("");
-    oss.clear();
-    oss << "dsks" << (i + 1) << "_remain";
-    chan_names.push_back(oss.str());
-    oss.str("");
-    oss.clear();
+  for (int i = 0; i < n_of_dsks_; i++) {
+    chan_names_.push_back("dsks1");
+    oss_ << "dsks" << (i + 1) << "_intran";
+    chan_names_.push_back(oss_.str());
+    oss_.str("");
+    oss_.clear();
+    oss_ << "dsks" << (i + 1) << "_inauto";
+    chan_names_.push_back(oss_.str());
+    oss_.str("");
+    oss_.clear();
+    oss_ << "dsks" << (i + 1) << "_remain";
+    chan_names_.push_back(oss_.str());
+    oss_.str("");
+    oss_.clear();
 
-    chan_values.push_back(0.0f);
-    chan_values.push_back(0.0f);
-    chan_values.push_back(0.0f);
-    chan_values.push_back(0.0f);
+    chan_values_.push_back(0.0f);
+    chan_values_.push_back(0.0f);
+    chan_values_.push_back(0.0f);
+    chan_values_.push_back(0.0f);
   }
 }
 
-void Atem::readCommandProductId(vector<uint8_t> data) {
-  atem_product_id = string((const char*)data.data());
+void Atem::readCommandProductId(std::vector<uint8_t> data) {
+  atem_product_id_ = std::string((const char*)data.data());
 }
 
-void Atem::readCommandWarning(vector<uint8_t> data) {
-  atem_warning = string((const char*)data.data());
+void Atem::readCommandWarning(std::vector<uint8_t> data) {
+  atem_warning_ = std::string((const char*)data.data());
 }
 
-void Atem::readCommandInputProperty(vector<uint8_t> data) {
+void Atem::readCommandInputProperty(std::vector<uint8_t> data) {
   uint16_t i = word(data[0], data[1]);
 
   if (i > 0 && i < 1000) {
-    if (i > nofInputs) {
-      nofInputs = i;
-      topology_values[8] = i;
-      atem_input_names.resize(i);
-      atem_input_labels.resize(i);
+    if (i > n_of_inputs_) {
+      input_names_.resize(i);
+      input_labels_.resize(i);
+      n_of_inputs_ = i;
+      topology_values_[8] = i;
     }
 
-    vector<uint8_t> name_data(data.begin() + 2, data.begin() + 21);
-    atem_input_names[i - 1] = string((const char*)name_data.data());
+    std::vector<uint8_t> name_data(data.begin() + 2, data.begin() + 21);
+    input_names_[i - 1] = std::string((const char*)name_data.data());
 
-    vector<uint8_t> label_data(data.begin() + 22, data.begin() + 25);
-    atem_input_labels[i - 1] = string((const char*)label_data.data());
+    std::vector<uint8_t> label_data(data.begin() + 22, data.begin() + 25);
+    input_labels_[i - 1] = std::string((const char*)label_data.data());
   }
 }
 
-void Atem::readCommandMacroRunStatus(vector<uint8_t> data) {
+void Atem::readCommandMacroRunStatus(std::vector<uint8_t> data) {
   uint16_t i = word(data[2], data[3]);
 
   if (i == 65535) {
-    fill(atem_macro_run_status.begin(), atem_macro_run_status.end(), 0);
+    fill(macro_run_status_.begin(), macro_run_status_.end(), 0);
   } else {
-    if (i >= nofMacros) {
-      nofMacros = int(i + 1);
-      topology_values[9] = (float)nofMacros;
-      atem_macro_names.resize(nofMacros);
-      atem_macro_run_status.resize(nofMacros);
+    if (i >= n_of_macros_) {
+      n_of_macros_ = int(i + 1);
+      topology_values_[9] = (float)n_of_macros_;
+      macro_names_.resize(n_of_macros_);
+      macro_run_status_.resize(n_of_macros_);
     }
 
     uint16_t s = (int)data[0];
-    atem_macro_run_status[i] = s;
+    macro_run_status_[i] = s;
   }
 }
 
-void Atem::readCommandMacroProperty(vector<uint8_t> data) {
+void Atem::readCommandMacroProperty(std::vector<uint8_t> data) {
   int i = (int)data[1];
   int v = (int)data[2];
 
-  if (i >= nofMacros) {
-    nofMacros = int(i + 1);
-    topology_values[9] = (float)nofMacros;
-    atem_macro_names.resize(nofMacros);
-    atem_macro_run_status.resize(nofMacros);
+  if (i >= n_of_macros_) {
+    n_of_macros_ = int(i + 1);
+    topology_values_[9] = (float)n_of_macros_;
+    macro_names_.resize(n_of_macros_);
+    macro_run_status_.resize(n_of_macros_);
   }
 
   if (v > 0) {
     uint16_t name_length = word(data[4], data[5]);
-    string name = string(data.begin() + 8, data.begin() + 8 + name_length);
-    atem_macro_names[i] = name;
+    std::string name =
+        std::string(data.begin() + 8, data.begin() + 8 + name_length);
+    macro_names_[i] = name;
   } else {
-    atem_macro_names[i] = "";
+    macro_names_[i] = "";
   }
 }
 
-void Atem::readCommandProgramInput(vector<uint8_t> data) {
+void Atem::readCommandProgramInput(std::vector<uint8_t> data) {
   int m = (int)data[0];
   uint16_t i = word(data[2], data[3]);
-  chan_values[m] = (float)i;
+  chan_values_[m] = (float)i;
 }
 
-void Atem::readCommandPreviewInput(vector<uint8_t> data) {
-  int m = (int)data[0] + nofMEs;
+void Atem::readCommandPreviewInput(std::vector<uint8_t> data) {
+  int m = (int)data[0] + n_of_mes_;
   uint16_t i = word(data[2], data[3]);
-  chan_values[m] = (float)i;
+  chan_values_[m] = (float)i;
 }
 
-void Atem::readCommandAuxSource(vector<uint8_t> data) {
-  int i = (int)data[0] + nofMEs * 2;
+void Atem::readCommandAuxSource(std::vector<uint8_t> data) {
+  int i = (int)data[0] + n_of_mes_ * 2;
   uint16_t s = word(data[2], data[3]);
-  chan_values[i] = (float)s;
+  chan_values_[i] = (float)s;
 }
 
-void Atem::readCommandDownstreamKeyer(vector<uint8_t> data) {
-  int i = data[0] * 4 + nofMEs * 2 + nofAuxs;
+void Atem::readCommandDownstreamKeyer(std::vector<uint8_t> data) {
+  int i = data[0] * 4 + n_of_mes_ * 2 + n_of_auxs_;
   bool onair = (data[1] & 0x01) > 0;
   bool intran = (data[2] & 0x01) > 0;
   bool inauto = (data[3] & 0x01) > 0;
   int remain = (int)data[5];
-  chan_values[i] = (float)onair;
-  chan_values[static_cast<__int64>(i) + 1] = (float)intran;
-  chan_values[static_cast<__int64>(i) + 2] = (float)inauto;
-  chan_values[static_cast<__int64>(i) + 3] = (float)remain;
+  chan_values_[i] = (float)onair;
+  chan_values_[static_cast<__int64>(i) + 1] = (float)intran;
+  chan_values_[static_cast<__int64>(i) + 2] = (float)inauto;
+  chan_values_[static_cast<__int64>(i) + 3] = (float)remain;
 }
 
-void Atem::sendCommand(string command, vector<uint8_t> data) {
+void Atem::sendCommand(std::string command, std::vector<uint8_t> data) {
   if (!isConnected()) return;
 
-  local_packet_id++;
+  local_packet_id_++;
 
   int size = 20 + int(data.size());
-  vector<uint8_t> packet(size, 0);
+  std::vector<uint8_t> packet(size, 0);
 
   packet[0] = size >> 0x08 | 0x08;
   packet[1] = size & 0xff;
-  packet[10] = local_packet_id >> 0x08;
-  packet[11] = local_packet_id & 0xff;
+  packet[10] = local_packet_id_ >> 0x08;
+  packet[11] = local_packet_id_ & 0xff;
   packet[12] = uint8_t((8 + command.size()) >> 0x08);
   packet[13] = uint8_t((8 + command.size()) & 0xff);
 
@@ -350,19 +393,19 @@ void Atem::sendCommand(string command, vector<uint8_t> data) {
 }
 
 void Atem::performCut(uint8_t me) {
-  vector<uint8_t> data{me, 0, 0, 0};
+  std::vector<uint8_t> data{me, 0, 0, 0};
   sendCommand("DCut", data);
 }
 
 void Atem::performAuto(uint8_t me) {
-  vector<uint8_t> data{me, 0, 0, 0};
+  std::vector<uint8_t> data{me, 0, 0, 0};
   sendCommand("DAut", data);
 }
 
 void Atem::changeProgramInput(uint8_t me, uint16_t source) {
-  cpgi[me] = source;
+  cpgi_[me] = source;
 
-  vector<uint8_t> data{me, 0};
+  std::vector<uint8_t> data{me, 0};
   data.push_back(source >> 0x08);
   data.push_back(source & 0xff);
 
@@ -370,9 +413,9 @@ void Atem::changeProgramInput(uint8_t me, uint16_t source) {
 }
 
 void Atem::changePreviewInput(uint8_t me, uint16_t source) {
-  cpvi[me] = source;
+  cpvi_[me] = source;
 
-  vector<uint8_t> data{me, 0};
+  std::vector<uint8_t> data{me, 0};
   data.push_back(source >> 0x08);
   data.push_back(source & 0xff);
 
@@ -380,9 +423,9 @@ void Atem::changePreviewInput(uint8_t me, uint16_t source) {
 }
 
 void Atem::changeAuxSource(uint8_t index, uint16_t source) {
-  caus[index] = source;
+  caus(index, source);
 
-  vector<uint8_t> data{1, index};
+  std::vector<uint8_t> data{1, index};
   data.push_back(source >> 0x08);
   data.push_back(source & 0xff);
 
@@ -390,16 +433,16 @@ void Atem::changeAuxSource(uint8_t index, uint16_t source) {
 }
 
 void Atem::changeDownstreamKeyer(uint8_t keyer, bool onair) {
-  cdsl[keyer] = onair;
+  cdsl_[keyer] = onair;
 
-  vector<uint8_t> data{keyer, 0, 0, 0};
+  std::vector<uint8_t> data{keyer, 0, 0, 0};
   if (onair) data[1] |= 0x01;
 
   sendCommand("CDsL", data);
 }
 
 void Atem::performDownstreamKeyerAuto(uint8_t keyer) {
-  vector<uint8_t> data{keyer, 0, 0, 0};
+  std::vector<uint8_t> data{keyer, 0, 0, 0};
   sendCommand("DDsA", data);
 }
 
